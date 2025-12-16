@@ -195,7 +195,7 @@ emr-appointment-system/
 
 ## 🔗 Live Demo
 
-[Add your Vercel/Netlify deployment link here]
+**🌐 [Live Demo: https://emrsys.netlify.app/](https://emrsys.netlify.app/)**
 
 ---
 
