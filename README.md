@@ -2,6 +2,13 @@
 
 A modern appointment management system for Electronic Medical Records (EMR), built as part of the SDE Intern Assignment.
 
+
+## 🔗 Live Demo
+
+**🌐 [Live Demo: https://emrsys.netlify.app/](https://emrsys.netlify.app/)**
+
+---
+
 ## 📋 Assignment Overview
 
 This project implements **Feature B: Appointment Scheduling and Queue Management**, including:
@@ -193,10 +200,3 @@ emr-appointment-system/
 └── README.md                 # This file
 ```
 
-## 🔗 Live Demo
-
-**🌐 [Live Demo: https://emrsys.netlify.app/](https://emrsys.netlify.app/)**
-
----
-
-Built with ❤️ for the SDE Intern Assignment
