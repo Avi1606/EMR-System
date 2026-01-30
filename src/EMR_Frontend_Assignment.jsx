@@ -10,6 +10,14 @@ import React, { useState, useEffect } from 'react';
  * In production, these functions would be replaced with actual GraphQL queries:
  * - getAppointments() -> Apollo Client query
  * - updateAppointmentStatus() -> Apollo Client mutation
+ * - createAppointment() -> Apollo Client mutation
+ * - deleteAppointment() -> Apollo Client mutation
+ *
+ * API Contract (mirrors appointment_service.py):
+ * - get_appointments(filters: { date?, status?, doctorName? }) -> Appointment[]
+ * - create_appointment(input: CreateAppointmentInput) -> Appointment
+ * - update_appointment_status(id, new_status) -> Appointment
+ * - delete_appointment(id) -> boolean
  */
 
 // =============================================================================
@@ -19,11 +27,14 @@ import React, { useState, useEffect } from 'react';
 // via GraphQL API. In a real implementation, this would be fetched from:
 // appointment_service.get_appointments()
 
+// Auto-increment counter for generating unique IDs (simulates backend)
+let _nextId = 13;
+
 let mockAppointments = [
   {
     id: 1,
     name: "Sarah Johnson",
-    date: "2025-12-16",
+    date: "2026-01-30",
     time: "09:00",
     duration: 30,
     doctorName: "Dr. Rajesh Kumar",
@@ -37,7 +48,7 @@ let mockAppointments = [
   {
     id: 2,
     name: "Michael Chen",
-    date: "2025-12-16",
+    date: "2026-01-30",
     time: "10:00",
     duration: 45,
     doctorName: "Dr. Priya Sharma",
@@ -51,7 +62,7 @@ let mockAppointments = [
   {
     id: 3,
     name: "Emily Rodriguez",
-    date: "2025-12-16",
+    date: "2026-01-30",
     time: "11:30",
     duration: 30,
     doctorName: "Dr. Rajesh Kumar",
@@ -65,7 +76,7 @@ let mockAppointments = [
   {
     id: 4,
     name: "Rahul Sharma",
-    date: "2025-12-17",
+    date: "2026-01-31",
     time: "09:00",
     duration: 30,
     doctorName: "Dr. Priya Sharma",
@@ -79,7 +90,7 @@ let mockAppointments = [
   {
     id: 5,
     name: "Anita Desai",
-    date: "2025-12-17",
+    date: "2026-01-31",
     time: "14:00",
     duration: 45,
     doctorName: "Dr. Amit Patel",
@@ -93,7 +104,7 @@ let mockAppointments = [
   {
     id: 6,
     name: "Vikram Singh",
-    date: "2025-12-15",
+    date: "2026-01-29",
     time: "10:00",
     duration: 30,
     doctorName: "Dr. Rajesh Kumar",
@@ -107,7 +118,7 @@ let mockAppointments = [
   {
     id: 7,
     name: "Priya Nair",
-    date: "2025-12-15",
+    date: "2026-01-29",
     time: "15:30",
     duration: 45,
     doctorName: "Dr. Amit Patel",
@@ -121,7 +132,7 @@ let mockAppointments = [
   {
     id: 8,
     name: "Deepak Malhotra",
-    date: "2025-12-18",
+    date: "2026-02-01",
     time: "09:30",
     duration: 30,
     doctorName: "Dr. Priya Sharma",
@@ -135,7 +146,7 @@ let mockAppointments = [
   {
     id: 9,
     name: "Sunita Verma",
-    date: "2025-12-18",
+    date: "2026-02-01",
     time: "11:00",
     duration: 60,
     doctorName: "Dr. Rajesh Kumar",
@@ -149,7 +160,7 @@ let mockAppointments = [
   {
     id: 10,
     name: "Kiran Joshi",
-    date: "2025-12-16",
+    date: "2026-01-30",
     time: "16:00",
     duration: 30,
     doctorName: "Dr. Amit Patel",
@@ -163,7 +174,7 @@ let mockAppointments = [
   {
     id: 11,
     name: "Neha Kapoor",
-    date: "2025-12-14",
+    date: "2026-01-28",
     time: "10:30",
     duration: 30,
     doctorName: "Dr. Amit Patel",
@@ -177,7 +188,7 @@ let mockAppointments = [
   {
     id: 12,
     name: "Amit Tiwari",
-    date: "2025-12-19",
+    date: "2026-02-02",
     time: "14:30",
     duration: 45,
     doctorName: "Dr. Priya Sharma",
@@ -195,16 +206,16 @@ let mockAppointments = [
 // =============================================================================
 
 /**
- * Simulates: appointment_service.get_appointments(date, status)
+ * Simulates: appointment_service.get_appointments(date, status, doctorName)
  *
  * In production, this would be a GraphQL query:
- * query GetAppointments($date: String, $status: String) {
- *   getAppointments(date: $date, status: $status) {
+ * query GetAppointments($date: String, $status: String, $doctorName: String) {
+ *   getAppointments(date: $date, status: $status, doctorName: $doctorName) {
  *     id, name, date, time, duration, doctorName, status, mode, reason, phone, email, notes
  *   }
  * }
  */
-const getAppointments = (date = null, status = null) => {
+const getAppointments = (date = null, status = null, doctorName = null) => {
   // Simulate fetching from Python backend
   let result = [...mockAppointments];
 
@@ -213,6 +224,9 @@ const getAppointments = (date = null, status = null) => {
   }
   if (status) {
     result = result.filter(apt => apt.status === status);
+  }
+  if (doctorName) {
+    result = result.filter(apt => apt.doctorName === doctorName);
   }
 
   return result;
@@ -242,25 +256,134 @@ const updateAppointmentStatus = (id, newStatus) => {
 };
 
 /**
- * Simulates adding a new appointment
- * In production, this would be a GraphQL mutation
+ * Helper function to convert time string to minutes for comparison
  */
-const addNewAppointment = (appointmentData) => {
-  const newId = Math.max(...mockAppointments.map(a => a.id)) + 1;
+const timeToMinutes = (timeStr) => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+/**
+ * Simulates: appointment_service.create_appointment(payload)
+ *
+ * Creates a new appointment with validation and time conflict detection.
+ *
+ * In production, this would be a GraphQL mutation:
+ * mutation CreateAppointment($input: CreateAppointmentInput!) {
+ *   createAppointment(input: $input) {
+ *     id, name, date, time, duration, doctorName, status, mode, reason, phone, email, notes
+ *   }
+ * }
+ *
+ * Required fields: patientName, date, time, duration, doctorName, mode
+ * Default status: 'Scheduled' (unless explicitly provided)
+ * Includes time conflict detection for the same doctor on the same date
+ *
+ * @param {Object} payload - The appointment data
+ * @returns {Object} The created appointment with generated ID
+ * @throws {Error} If required fields are missing or time conflict is detected
+ */
+const createAppointment = (payload) => {
+  // STEP 1: Validate required fields
+  const requiredFields = ['patientName', 'date', 'time', 'duration', 'doctorName', 'mode'];
+  const missingFields = requiredFields.filter(field => !payload[field]);
+
+  if (missingFields.length > 0) {
+    throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+  }
+
+  // STEP 2: Check for time conflicts (overlap detection)
+  const newDate = payload.date;
+  const newTime = payload.time;
+  const newDuration = parseInt(payload.duration);
+  const newDoctor = payload.doctorName;
+
+  const newStart = timeToMinutes(newTime);
+  const newEnd = newStart + newDuration;
+
+  // Check for conflicts with existing appointments for the same doctor on the same date
+  for (const apt of mockAppointments) {
+    if (apt.doctorName === newDoctor &&
+        apt.date === newDate &&
+        apt.status !== 'Cancelled') {
+
+      const existingStart = timeToMinutes(apt.time);
+      const existingEnd = existingStart + apt.duration;
+
+      // Check for overlap: two time ranges overlap if one starts before the other ends
+      // Overlap condition: (new_start < existing_end) AND (existing_start < new_end)
+      if (newStart < existingEnd && existingStart < newEnd) {
+        throw new Error(
+          `Time conflict detected: ${newDoctor} already has an appointment ` +
+          `on ${newDate} from ${apt.time} for ${apt.duration} minutes ` +
+          `(Patient: ${apt.name})`
+        );
+      }
+    }
+  }
+
+  // STEP 3: Generate unique ID and create appointment
+  // In production, the ID would be generated by PostgreSQL (UUID or SERIAL)
+  const newId = _nextId++;
+
+  // Create the new appointment object
   const newAppointment = {
     id: newId,
-    ...appointmentData
+    name: payload.patientName, // Map patientName to name for consistency with data model
+    date: payload.date,
+    time: payload.time,
+    duration: parseInt(payload.duration),
+    doctorName: payload.doctorName,
+    status: payload.status || 'Scheduled', // Default to 'Scheduled' if not provided
+    mode: payload.mode,
+    reason: payload.reason || '',
+    phone: payload.phone || '',
+    email: payload.email || '',
+    notes: payload.notes || ''
   };
+
+  // STEP 4: Insert into mock database
+  // In production: Aurora transactional write
   mockAppointments.push(newAppointment);
+
+  // NOTE: In production, after this point:
+  // 1. AppSync Subscription (onAppointmentCreated) would be triggered
+  // 2. All subscribed clients receive the new appointment in real-time
+
   return newAppointment;
 };
 
+/**
+ * Simulates: appointment_service.delete_appointment(id)
+ *
+ * Deletes an appointment from the system.
+ *
+ * In production, this would be a GraphQL mutation:
+ * mutation DeleteAppointment($id: ID!) {
+ *   deleteAppointment(id: $id)
+ * }
+ *
+ * @param {number} id - The ID of the appointment to delete
+ * @returns {boolean} True if deletion was successful, false otherwise
+ */
+const deleteAppointment = (id) => {
+  const index = mockAppointments.findIndex(a => a.id === id);
+  if (index !== -1) {
+    mockAppointments.splice(index, 1);
+    // NOTE: In production, after this point:
+    // 1. AppSync Subscription (onAppointmentDeleted) would be triggered
+    // 2. All subscribed clients remove the appointment from their view
+    return true;
+  }
+  return false;
+};
+
 // New Appointment Modal Component
-const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
+const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors, error, onClearError }) => {
   const todayDate = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
-    name: '',
+    patientName: '', // Changed from 'name' to match backend contract
     date: todayDate,
     time: '09:00',
     duration: 30,
@@ -273,21 +396,71 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
     notes: ''
   });
 
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Update doctorName when doctors list changes
+  useEffect(() => {
+    if (doctors.length > 0 && !doctors.includes(formData.doctorName)) {
+      setFormData(prev => ({ ...prev, doctorName: doctors[0] }));
+    }
+  }, [doctors]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear validation error for this field when user types
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: '' }));
+    }
+    // Clear backend error when user makes changes
+    if (error && onClearError) {
+      onClearError();
+    }
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    // Required fields as per backend contract
+    if (!formData.patientName.trim()) {
+      errors.patientName = 'Patient name is required';
+    }
+    if (!formData.date) {
+      errors.date = 'Date is required';
+    }
+    if (!formData.time) {
+      errors.time = 'Time is required';
+    }
+    if (!formData.duration) {
+      errors.duration = 'Duration is required';
+    }
+    if (!formData.doctorName) {
+      errors.doctorName = 'Doctor is required';
+    }
+    if (!formData.mode) {
+      errors.mode = 'Mode is required';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.reason || !formData.phone || !formData.email) {
-      alert('Please fill in all required fields');
+
+    if (!validateForm()) {
       return;
     }
+
+    // Call the backend function via the parent handler
+    // The parent will handle the actual createAppointment call and error handling
     onSave(formData);
-    // Reset form
+  };
+
+  const handleClose = () => {
+    // Reset form on close
     setFormData({
-      name: '',
+      patientName: '',
       date: todayDate,
       time: '09:00',
       duration: 30,
@@ -299,6 +472,11 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
       email: '',
       notes: ''
     });
+    setValidationErrors({});
+    if (onClearError) {
+      onClearError();
+    }
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -308,21 +486,30 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
       <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-800">New Appointment</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+          <button onClick={handleClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
         </div>
+
+        {/* Display backend error (e.g., time conflict) */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            ⚠️ {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
             <input
               type="text"
-              name="name"
-              value={formData.name}
+              name="patientName"
+              value={formData.patientName}
               onChange={handleChange}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.patientName ? 'border-red-500' : ''}`}
               placeholder="Enter patient name"
-              required
             />
+            {validationErrors.patientName && (
+              <p className="mt-1 text-xs text-red-500">{validationErrors.patientName}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -333,9 +520,11 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
                 name="date"
                 value={formData.date}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.date ? 'border-red-500' : ''}`}
               />
+              {validationErrors.date && (
+                <p className="mt-1 text-xs text-red-500">{validationErrors.date}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Time *</label>
@@ -344,20 +533,22 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
                 name="time"
                 value={formData.time}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.time ? 'border-red-500' : ''}`}
               />
+              {validationErrors.time && (
+                <p className="mt-1 text-xs text-red-500">{validationErrors.time}</p>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (mins)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (mins) *</label>
               <select
                 name="duration"
                 value={formData.duration}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.duration ? 'border-red-500' : ''}`}
               >
                 <option value={15}>15 minutes</option>
                 <option value={30}>30 minutes</option>
@@ -371,7 +562,7 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
                 name="doctorName"
                 value={formData.doctorName}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.doctorName ? 'border-red-500' : ''}`}
               >
                 {doctors.map(doc => (
                   <option key={doc} value={doc}>{doc}</option>
@@ -382,12 +573,12 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mode *</label>
               <select
                 name="mode"
                 value={formData.mode}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors.mode ? 'border-red-500' : ''}`}
               >
                 <option value="In-Person">In-Person</option>
                 <option value="Video Call">Video Call</option>
@@ -410,7 +601,7 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
             <input
               type="text"
               name="reason"
@@ -418,13 +609,12 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="e.g., General Checkup, Follow-up"
-              required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
               <input
                 type="tel"
                 name="phone"
@@ -432,11 +622,10 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="+91 98765 43210"
-                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
                 name="email"
@@ -444,7 +633,6 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="patient@email.com"
-                required
               />
             </div>
           </div>
@@ -464,7 +652,7 @@ const NewAppointmentModal = ({ isOpen, onClose, onSave, doctors }) => {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
             >
               Cancel
@@ -707,7 +895,7 @@ const Calendar = ({ selectedDate, onDateSelect, currentMonth, onMonthChange, app
 };
 
 // Appointment Card
-const AppointmentCard = ({ appointment, onStatusUpdate }) => {
+const AppointmentCard = ({ appointment, onStatusUpdate, onDelete }) => {
   const statusColors = {
     'Confirmed': 'bg-green-100 text-green-700',
     'Scheduled': 'bg-blue-100 text-blue-700',
@@ -717,7 +905,13 @@ const AppointmentCard = ({ appointment, onStatusUpdate }) => {
   
   const avatarColors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'];
   const avatarColor = avatarColors[appointment.id % avatarColors.length];
-  
+
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to delete the appointment for ${appointment.name}?`)) {
+      onDelete(appointment.id);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm mb-4">
       <div className="flex items-start justify-between">
@@ -766,6 +960,7 @@ const AppointmentCard = ({ appointment, onStatusUpdate }) => {
             onClick={() => onStatusUpdate(appointment.id, 'Confirmed')}
             className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
             title="Confirm"
+            disabled={appointment.status === 'Confirmed'}
           >
             ✓
           </button>
@@ -773,8 +968,16 @@ const AppointmentCard = ({ appointment, onStatusUpdate }) => {
             onClick={() => onStatusUpdate(appointment.id, 'Cancelled')}
             className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
             title="Cancel"
+            disabled={appointment.status === 'Cancelled'}
           >
             ✕
+          </button>
+          <button
+            onClick={handleDelete}
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            title="Delete Appointment"
+          >
+            🗑️
           </button>
         </div>
       </div>
@@ -798,6 +1001,8 @@ const AppointmentManagementView = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   // Modal state for new appointment
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  // Error state for create appointment (e.g., time conflict)
+  const [createError, setCreateError] = useState('');
 
   // Today's date - using current system date (format: YYYY-MM-DD)
   const TODAY = new Date().toISOString().split('T')[0];
@@ -921,18 +1126,67 @@ const AppointmentManagementView = () => {
     }
   };
 
-  // Add new appointment handler
+  // =============================================================================
+  // TASK 2.5: CREATE APPOINTMENT - Call backend with validation
+  // =============================================================================
+  /**
+   * Handles adding a new appointment through the backend API.
+   * - Calls createAppointment() which validates required fields
+   * - Checks for time conflicts (same doctor, same date/time)
+   * - Refreshes local state on success
+   * - Displays error message on failure (e.g., time conflict)
+   *
+   * IMPORTANT: State is NOT mutated directly - only through backend call
+   */
   const handleAddAppointment = (appointmentData) => {
-    // Call the backend addNewAppointment function
-    // Simulating: addNewAppointment(appointmentData)
-    const newAppointment = addNewAppointment(appointmentData);
+    try {
+      // Clear any previous error
+      setCreateError('');
 
-    if (newAppointment) {
-      // Immediately refresh local state to include the new appointment
+      // Call the backend createAppointment function
+      // Simulating: create_appointment(appointmentData)
+      // This will:
+      // 1. Validate required fields (patientName, date, time, duration, doctorName, mode)
+      // 2. Check for time conflicts for the same doctor
+      // 3. Generate a unique ID on the backend
+      // 4. Set default status to 'Scheduled' if not provided
+      const newAppointment = createAppointment(appointmentData);
+
+      if (newAppointment) {
+        // Immediately refresh local state to include the new appointment
+        const refreshedData = getAppointments();
+        setAppointments([...refreshedData]);
+        // Close the modal on success
+        setIsNewAppointmentOpen(false);
+        // Note: The useEffect will automatically re-filter based on current criteria
+      }
+    } catch (error) {
+      // Handle validation errors or time conflicts from the backend
+      // Display the error in the modal (e.g., "Time conflict detected...")
+      setCreateError(error.message);
+    }
+  };
+
+  // =============================================================================
+  // TASK 1.5 (BONUS): DELETE APPOINTMENT - Call backend and refresh UI
+  // =============================================================================
+  /**
+   * Handles deleting an appointment through the backend API.
+   * - Calls deleteAppointment() which removes from mock database
+   * - Refreshes local state on success
+   *
+   * IMPORTANT: State is NOT mutated directly - only through backend call
+   */
+  const handleDeleteAppointment = (id) => {
+    // Call the backend deleteAppointment function
+    // Simulating: delete_appointment(id)
+    const success = deleteAppointment(id);
+
+    if (success) {
+      // Immediately refresh local state to remove the deleted appointment
+      // This simulates real-time UI updates (like AppSync subscriptions would do)
       const refreshedData = getAppointments();
       setAppointments([...refreshedData]);
-      // Close the modal
-      setIsNewAppointmentOpen(false);
       // Note: The useEffect will automatically re-filter based on current criteria
     }
   };
@@ -1132,6 +1386,7 @@ const AppointmentManagementView = () => {
                     key={apt.id} 
                     appointment={apt} 
                     onStatusUpdate={handleStatusUpdate}
+                    onDelete={handleDeleteAppointment}
                   />
                 ))
               ) : (
@@ -1160,9 +1415,14 @@ const AppointmentManagementView = () => {
         {/* New Appointment Modal */}
         <NewAppointmentModal
           isOpen={isNewAppointmentOpen}
-          onClose={() => setIsNewAppointmentOpen(false)}
+          onClose={() => {
+            setIsNewAppointmentOpen(false);
+            setCreateError('');
+          }}
           onSave={handleAddAppointment}
           doctors={doctors}
+          error={createError}
+          onClearError={() => setCreateError('')}
         />
       </div>
     </div>
